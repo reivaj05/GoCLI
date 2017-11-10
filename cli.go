@@ -2,6 +2,7 @@ package GoCLI
 
 import (
 	"os"
+	"fmt"
 
 	"github.com/urfave/cli"
 )
@@ -9,11 +10,14 @@ import (
 type Command struct {
 	Name   string
 	Usage  string
-	Action func(args ...string) error
+	Action func(flags map[string]string, args ...string) error
+	StringFlags   []*StringFlag
 }
 
 type StringFlag struct {
-	*cli.StringFlag
+	Name    string
+	Usage   string
+	Default string
 }
 
 type BoolFlag struct {
@@ -38,7 +42,7 @@ func createCLIApp(options *Options) *cli.App {
 	app.Name = options.AppName
 	app.Usage = options.AppUsage
 	app.Commands = createAppCommands(options.Commands)
-	// app.Flags = createAppFlags()
+	app.Flags = createAppFlags(options.StringFlags)
 	if options.DefaultAction != nil {
 		app.Action = func(c *cli.Context) error {
 			return options.DefaultAction()
@@ -60,8 +64,14 @@ func createCommand(command *Command) cli.Command {
 		Name:  command.Name,
 		Usage: command.Usage,
 		Action: func(c *cli.Context) error {
-			return command.Action(getArgs(c)...)
+			if err := command.Action(getFlags(c), getArgs(c)...); err != nil {
+				fmt.Println(err)
+				return err
+			}
+			return nil
 		},
+		Flags: createAppFlags(command.StringFlags),
+		HideHelp: true,
 	}
 }
 
@@ -73,6 +83,26 @@ func getArgs(context *cli.Context) (args []string) {
 	return args
 }
 
-func createAppFlags() []*cli.Command {
-	return nil
+func getFlags(context *cli.Context) map[string]string {
+	flags := map[string]string{}
+	for _, name := range context.FlagNames() {
+		flags[name] = context.String(name)
+	}
+	return flags
+}
+
+func createAppFlags(flags []*StringFlag) []cli.Flag{
+	fl := []cli.Flag{}
+	for _, flag := range flags {
+		fl = append(fl, createFlag(flag))
+	}
+	return fl
+}
+
+func createFlag(flag *StringFlag) cli.Flag {
+	return cli.StringFlag{
+		Name:  flag.Name,
+		Usage: flag.Usage,
+		Value: flag.Default,
+	}
 }
